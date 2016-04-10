@@ -32,35 +32,41 @@ import SSL.SelfTrustManager;
 
 public class ServerSystem {
 	
-	private HashMap<String, StringBuilder> openFiles;
-	private HashMap<String, String> filePathNames;
-	
 	private static ServerSocketChannel commServerSocketChannel;
-	private CommunicationServer commServer;
-	
 	public static final int LOGIN = 0;
+	
 	public static final int NEW_FILE = 1;
 	public static final int INSERT = 2;
+	
 	public static final int PULL_CHANGES = 3;
 	public static final int AVAILABLE_FILES = 4;
 	public static final int GET_FILE = 5;
 	public static final int DELETE = 6;
 	public static final int LOGOUT = 7;
-
+	
+	private static final String SERVER_INET_ADDRESS = "10.20.216.10";
+	private final int SERVER_PORT = 22754;
+	
+	public static void main(String[] args){
+		ServerSystem serverSystem = new ServerSystem();
+	}
+	
+	private HashMap<String, StringBuilder> openFiles;
+	private HashMap<String, String> filePathNames;
+	
+	private ConcurrentServer commServer; 
 	private File fileDirectory;
 	
-	private SSLServerSocketFactory sslSocketFactory; 
+	private SSLServerSocketFactory sslSocketFactory;
 	private SSLContext sslContext;
-	
 	/*
 	 * Security variables
 	 */
 	private final String SERVER_KEYSTORE_LOCATION = "security/charon_server.jks";
+	
 	private final String KEYSTORE_PASSWORD = "#Ry@uL?P@r+xydc$9Zy9etuVsHsXx*qaDG!_XL_RL2TxHE6yJ8VFFjCfxa5a3-zw";
 	private final String CERTIFICATE_PASSWORD = "Q2H5m=?PvsnQM@Jc9W*bVQNnp3j^XrmCaJWtKHNDyY_PEcU$A-?t228sTP48SM9+";
 	
-	private final int COMM_SERVER_PORT = 22754;
-	private static final String COMM_SERVER_INET_ADDRESS = "10.20.221.152";
 	
 	public ServerSystem() {
 		filePathNames = new HashMap<String, String>();
@@ -93,57 +99,8 @@ public class ServerSystem {
 		}
 	}
 	
-	/**
-	 * Sets up the communication accept server
-	 * @throws IOException
-	 */
-	public void initCommServer() throws IOException {
-		InetSocketAddress inet_socket_address = new InetSocketAddress(COMM_SERVER_INET_ADDRESS, COMM_SERVER_PORT);
-		
-		try {
-			commServerSocketChannel = ServerSocketChannel.open();
-			commServerSocketChannel.configureBlocking(false);
-			commServerSocketChannel.socket().bind(inet_socket_address, 50);
-		} catch (IOException e) {
-			e.printStackTrace();
-			return;
-		}
-		
-		commServer = new CommunicationServer(this, sslContext, commServerSocketChannel, "Thread 0");	
-	}
-	
-	public void updateFile(String filename, String s, int pos, boolean add) {
-		if(add)
-			openFiles.put(filename, openFiles.get(filename).insert(pos, s));
-		else
-			openFiles.put(filename, openFiles.get(filename).delete(pos, s.length()));
-	}
-	
-	public Set<String> getFileNames() {
-		return filePathNames.keySet();
-	}
-	
-	
 	public String getFile(String filename) {
 		return openFiles.get(filename).toString();
-	}
-	
-	private HashMap<String, StringBuilder> loadFiles() { 
-		HashMap<String, StringBuilder> files = new HashMap<String, StringBuilder>();
-		
-		String[] fileList = fileDirectory.list();
-		
-		for(String f : fileList) {
-			String name = f.substring(f.lastIndexOf(File.separator), f.length() - 1);
-			filePathNames.put(name, f);
-			
-			String fileAsString = readFile(f, Charset.defaultCharset());
-			
-			if(fileAsString != null)
-				files.put(name, new StringBuilder(fileAsString));
-		}
-		
-		return files;
 	}
 	
 	private File getFileDirectory() {
@@ -164,6 +121,48 @@ public class ServerSystem {
 		return fileDirec;
 	}
 	
+	
+	public Set<String> getFileNames() {
+		return filePathNames.keySet();
+	}
+	
+	/**
+	 * Sets up the communication accept server
+	 * @throws IOException
+	 */
+	public void initCommServer() throws IOException {
+		InetSocketAddress inet_socket_address = new InetSocketAddress(COMM_SERVER_INET_ADDRESS, COMM_SERVER_PORT);
+		
+		try {
+			commServerSocketChannel = ServerSocketChannel.open();
+			commServerSocketChannel.configureBlocking(false);
+			commServerSocketChannel.socket().bind(inet_socket_address, 50);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return;
+		}
+		
+		commServer = new ConcurrentServer(this, sslContext, commServerSocketChannel, "Thread 0");	
+	}
+	
+	private HashMap<String, StringBuilder> loadFiles() { 
+		HashMap<String, StringBuilder> files = new HashMap<String, StringBuilder>();
+		
+		String[] fileList = fileDirectory.list();
+		
+		for(String f : fileList) {
+			String name = f.substring(f.lastIndexOf(File.separator), f.length() - 1);
+			filePathNames.put(name, f);
+			
+			String fileAsString = readFile(f, Charset.defaultCharset());
+			
+			if(fileAsString != null)
+				files.put(name, new StringBuilder(fileAsString));
+		}
+		
+		return files;
+	}
+	
 	private String readFile(String path, Charset encoding) {
 		byte[] encoded;
 		
@@ -180,9 +179,10 @@ public class ServerSystem {
 	}
 
 	
-	public static void main(String[] args){
-		ServerSystem serverSystem = new ServerSystem();
-		
-		
+	public void updateFile(String filename, String s, int pos, boolean add) {
+		if(add)
+			openFiles.put(filename, openFiles.get(filename).insert(pos, s));
+		else
+			openFiles.put(filename, openFiles.get(filename).delete(pos, s.length()));
 	}
 }
