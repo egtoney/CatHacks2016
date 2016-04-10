@@ -109,7 +109,7 @@ class StringNode(object):
 			if self.mod_type == ADDITION:					# second operation is ADDITION 
 				if b <= c:
 					self.mod_loc -= node.length
-				if a < c:
+				elif a < c:
 					self.mod_loc -= c - a
 			else											# second operation is DELETION done
 				if b <= c:
