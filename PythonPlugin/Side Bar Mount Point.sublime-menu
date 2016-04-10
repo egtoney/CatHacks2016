@@ -1,0 +1,3 @@
+[
+	{ "caption": "Sync Folder With Server", "command": "sync_folder_with_server", "args": {"paths": [] } }
+]
