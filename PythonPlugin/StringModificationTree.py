@@ -92,19 +92,38 @@ class StringNode(object):
 			return 1
 
 	def applyTransform(self, node):
-		a = self.mod_loc
-		b = a + self.length
-		c = node.mod_loc
-		d = c + node.mod_loc
+		a = node.mod_loc
+		b = a + node.length
+		c = self.mod_loc
+		d = c + self.mod_loc
+		if node.mod_type == ADDITION:					# first operation is ADDITION	
+			if self.mod_type == ADDITION:					# second operation is ADDITION done
+				if b <= c:
+					self.mod_loc += node.length
+			else											# second operation is DELETION done
+				if b <= c:
+					self.mod_loc -= node.length
+				elif a >= c && a < d:
+					self.length += node.length
+		else:											# first operation is DELETION
+			if self.mod_type == ADDITION:					# second operation is ADDITION 
+				if b <= c:
+					self.mod_loc -= node.length
+				if a < c:
+					self.mod_loc -= c - a
+			else											# second operation is DELETION done
+				if b <= c:
+					self.mod_loc -= node.length
+				elif a <= c:
+					if b < d:
+						self.mod_loc -= c - a
+						self.length -= b - c
+					else:
+						self.length = 0
+				elif a < d:
+					if b < d:
+						self.length -= b - a
+					else:
+						self.length -= d - a
 
-		if b < c:
-			pass
-		elif b < d:
-			if a > c:
-				self.mod_loc += node.length
-			else:
-				pass
-		elif a < d:
-			self.mod_loc += node.length
-		else:
-			self.mod_loc += node.length
+
