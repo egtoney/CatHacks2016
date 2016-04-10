@@ -1,9 +1,0 @@
-package com.cathacks2016.proxy.networking;
-
-public class ProxyServer {
-
-	public ProxyServer(){
-		
-	}
-	
-}

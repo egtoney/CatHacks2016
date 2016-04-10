@@ -1,9 +1,0 @@
-package com.cathacks2016.proxy;
-
-public class ProxyServer {
-
-	public static void main( String[] args ){
-		
-	}
-	
-}
