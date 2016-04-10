@@ -37,9 +37,15 @@ public class ThreadedServerBucket {
 		this.ssl_context = ssl_context;
 		
 		// Create base thread
-		ServerBucket initial_bucket = new ServerBucket();
+		ServerBucket initial_bucket = new ServerBucket(this);
 		buckets.put( initial_bucket.getName(), initial_bucket );
 		initial_bucket.start();
+	}
+	
+	public void addNewServerBucket() { 
+		ServerBucket bucket = new ServerBucket(this);
+		buckets.put( bucket.getName(), bucket );
+		bucket.start();
 	}
 	
 	private class ServerBucket extends Thread{
@@ -63,8 +69,13 @@ public class ThreadedServerBucket {
 		private static final String JAVA_SERVER_INET_ADDRESS = "10.20.221.152";
 		private static final int JAVA_PORT = 22725;
 		
-		public ServerBucket() {
+		private int num_players_connected = 0;
+		private ThreadedServerBucket threadedServerBucket;
+		
+		public ServerBucket(ThreadedServerBucket threadedServerBucket) {
 			super("Communication Server Thread ("+(next_thread_id++)+")");
+			
+			this.threadedServerBucket = threadedServerBucket;
 
 			try {
 				server_socket_channel.register(server_selector = Selector.open(), SelectionKey.OP_ACCEPT);
@@ -95,8 +106,12 @@ public class ThreadedServerBucket {
 					
 					try {
 						
-						if(key.isValid() && key.isAcceptable()) {
-							handleAccept(key);
+						if(num_players_connected < 100) {
+							if(key.isValid() && key.isAcceptable()) {
+								handleAccept(key);
+							}
+						} else {
+							threadedServerBucket.addNewServerBucket();
 						}
 						
 						if(key.isValid() && key.isReadable()) {
@@ -174,6 +189,8 @@ public class ThreadedServerBucket {
 				SelectionKey key = accepted_channel.register(server_selector, SelectionKey.OP_READ, session);
 				
 				session.setSelectionKey(key);
+				
+				num_players_connected++;
 
 				// Add client to open channels map
 				open_client_channels.put(ssl_socket_channel, session);
