@@ -1,8 +1,11 @@
 package Server;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.channels.ServerSocketChannel;
@@ -17,7 +20,10 @@ import java.security.SecureRandom;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.util.HashMap;
+import java.util.Map.Entry;
 import java.util.Set;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
@@ -44,6 +50,7 @@ public class ServerSystem {
 	public static final int GET_FILE = 5;
 	public static final int DELETE = 6;
 	public static final int LOGOUT = 7;
+	public static final int KEEP_ALIVE = 8;
 	
 	private static final String SERVER_INET_ADDRESS = "10.20.216.10";
 	private final int SERVER_PORT = 22754;
@@ -94,6 +101,47 @@ public class ServerSystem {
 			sslSocketFactory = sslContext.getServerSocketFactory();
 			
 			initConcurrentServer();
+			
+			Timer t = new Timer();
+			t.scheduleAtFixedRate(new TimerTask(){
+
+				@Override
+				public void run() {
+					for( Entry<String, StringModificationTree> file : openFiles.entrySet() ){
+						String new_path = fileDirectory.getAbsolutePath() + "/" + file.getKey();
+						if( new_path.contains("\\") ){
+							new_path = new_path.replaceAll("\\", "/");
+						}
+						
+						File new_file = new File( new_path );
+						
+						BufferedWriter out = null;
+						try {
+							out = new BufferedWriter( new FileWriter( new_file ) );
+							
+							String buffer = file.getValue().toString();
+							
+							System.out.println("Writing "+new_file.getAbsolutePath()+" with "+buffer);
+							
+							out.write( buffer );
+							out.flush();
+							
+						} catch (IOException e) {
+							e.printStackTrace();
+						} finally {
+							if( out != null ){
+								try {
+									out.close();
+								} catch (IOException e) {
+									// TODO Auto-generated catch block
+									e.printStackTrace();
+								}
+							}
+						}
+					}
+				}
+				
+			}, 1000, 2000);
 			
 		} catch (KeyStoreException | NoSuchAlgorithmException | CertificateException | IOException | UnrecoverableKeyException | KeyManagementException e) {
 			System.out.println(e.getMessage());
@@ -155,13 +203,26 @@ public class ServerSystem {
 		long file_loaded_time = System.currentTimeMillis();
 		
 		for(String f : fileList) {
-			String name = f.substring(f.lastIndexOf(File.separator), f.length() - 1);
-			filePathNames.put(name, f);
+			String new_path = fileDirectory.getAbsolutePath() + "/" + f;
+			if( new_path.contains("\\") ){
+				new_path = new_path.replaceAll("\\", "/");
+			}
 			
-			StringModificationTree fileAsString = new StringModificationTree( file_loaded_time, readFile(f, Charset.defaultCharset()) );
+			String file_name = f;
+			if( file_name.contains(File.separator) ){
+				file_name = file_name.substring(file_name.lastIndexOf(File.separator), file_name.length() - 1);
+			}
+			
+			// if hidden file
+			if( file_name.startsWith(".") )
+				continue;
+			
+			filePathNames.put(file_name, f);
+			
+			StringModificationTree fileAsString = new StringModificationTree( file_loaded_time, readFile(new_path, Charset.defaultCharset()) );
 			
 			if(fileAsString != null)
-				files.put(name, fileAsString);
+				files.put(file_name, fileAsString);
 		}
 		
 		return files;
@@ -179,31 +240,53 @@ public class ServerSystem {
 			//Silently Ignore
 		}
 		
+		System.out.println(path);
+		
 		return new String(encoded, encoding);
 	}
 
 	public void addTextToFile( String file, long timestamp, int location, String text ){
+		String new_path = fileDirectory.getAbsolutePath() + "/" + file;
+		if( new_path.contains("\\") ){
+			new_path = new_path.replaceAll("\\", "/");
+		}
+		
 		if( openFiles.containsKey( file ) ){
 			openFiles.get(file).applyTransformation( new StringNode( timestamp, location, text ) );
+		}else{
+			System.out.println("Tried to modify file "+new_path);
 		}
 	}
 	
 	public void removeTextFromFile( String file, long timestamp, int location, int length ){
+		String new_path = fileDirectory.getAbsolutePath() + "/" + file;
+		if( new_path.contains("\\") ){
+			new_path = new_path.replaceAll("\\", "/");
+		}
+		
 		if( openFiles.containsKey( file ) ){
 			openFiles.get(file).applyTransformation( new StringNode( timestamp, location, length ) );
+		}else{
+			System.out.println("Tried to modify file "+new_path);
 		}
 	}
 
-	public void createNewFile( String file ) {
-		if( !openFiles.containsKey( file ) ){
+	public void createNewFile( String file, String file_text ) {
+		String new_path = fileDirectory.getAbsolutePath() + "/" + file;
+		if( new_path.contains("\\") ){
+			new_path = new_path.replaceAll("\\", "/");
+		}
+		
+		if( !openFiles.containsKey( new_path ) ){
 			try {
-				String new_path = fileDirectory.getAbsolutePath() + file;
 				File new_file = new File( new_path );
 				
 				if( !new_file.exists() )
 					new_file.createNewFile();
+				
+				System.out.println( new_file.getAbsolutePath() );
 
-				StringModificationTree fileAsString = new StringModificationTree( System.currentTimeMillis(), readFile(new_file.getPath(), Charset.defaultCharset()) );
+				StringModificationTree fileAsString = new StringModificationTree( System.currentTimeMillis(), file_text );
 				
 				openFiles.put(file, fileAsString);
 				

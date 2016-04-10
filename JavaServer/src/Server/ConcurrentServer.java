@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 
+import org.apache.commons.lang3.StringEscapeUtils;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
@@ -72,7 +73,7 @@ public class ConcurrentServer extends Thread{
 			// Register for OP_READ with ssl_socket_channel as attachment
 			SelectionKey key = accepted_channel.register(server_selector, SelectionKey.OP_READ, session);
 
-			sendMessageToUser( "{\"id\":\"0\",\"session_id\":\"0000\"}", key, session );
+			sendMessageToUser( "{\"id\":\"0\",\"server_time\":\""+System.currentTimeMillis()+"\",\"status\":\"1\"}", key, session );
 			
 			// Add client to open channels map
 			open_channels.put(key, session);
@@ -111,6 +112,7 @@ public class ConcurrentServer extends Thread{
 				request.clear();
 			} catch (ParseException e) {
 				System.out.println("Invalid message format.");
+				e.printStackTrace();
 			}
 		}
 	}
@@ -150,7 +152,7 @@ public class ConcurrentServer extends Thread{
 			session.rewrite = true;
 		} else {
 			if(session.out_messages.isEmpty()) { 
-				// Write succeeded, don�t need OP_WRITE any more
+				// Write succeeded, don't need OP_WRITE any more
 				key.interestOps(key.interestOps() & ~SelectionKey.OP_WRITE);
 			} 
 			
@@ -166,7 +168,7 @@ public class ConcurrentServer extends Thread{
 		
 		String username = (String) obj.get("username");
 		
-		switch( (int) (long) obj.get("ID") )
+		switch( Integer.parseInt((String)obj.get("ID")) )
 		{
 			case ServerSystem.LOGIN:
 				{
@@ -177,15 +179,16 @@ public class ConcurrentServer extends Thread{
 			case ServerSystem.NEW_FILE:
 				{
 					String filename = (String) obj.get("filename");	
+					String file_text = StringEscapeUtils.unescapeJson( (String) obj.get("file_text") );
 					
-					serverSystem.createNewFile( filename );
+					serverSystem.createNewFile( filename, file_text );
 				}
 				break;
 			
 			case ServerSystem.INSERT:
 				{
 					String filename = (String) obj.get("filename");
-					long timestamp = (long) obj.get("timestamp");
+					long timestamp = Long.parseLong( (String) obj.get("timestamp") );
 					int location = Integer.parseInt( (String) obj.get("pos") );
 					String text = (String) obj.get("text");
 					
@@ -196,7 +199,7 @@ public class ConcurrentServer extends Thread{
 			case ServerSystem.DELETE:
 				{
 					String filename = (String) obj.get("filename");
-					long timestamp = (long) obj.get("timestamp");
+					long timestamp = Long.parseLong( (String) obj.get("timestamp") );
 					int location = Integer.parseInt( (String) obj.get("pos") );
 					int length = Integer.parseInt( (String) obj.get("length") );
 	
@@ -208,7 +211,7 @@ public class ConcurrentServer extends Thread{
 				{
 					String filename = (String) obj.get("filename");
 					
-					obj.put("file_text", serverSystem.getFile(filename));
+					obj.put("file_text", StringEscapeUtils.escapeJson( serverSystem.getFile(filename) ));
 					
 					sendMessageToUser(obj, key, (SSLClientSession)key.attachment());
 				}
@@ -253,7 +256,7 @@ public class ConcurrentServer extends Thread{
 
 			@Override
 			public void run() {
-				sendMessageToAllUsers("", "{}");
+				sendMessageToAllUsers("", "{\"ID\":\""+ServerSystem.KEEP_ALIVE+"\"}");
 			}
 			
 		}, 5000, 1000);
@@ -301,6 +304,9 @@ public class ConcurrentServer extends Thread{
 					removeKeyAndSession(key);
 				}
 			}
+			
+			// Apply transforms to files
+			
 			
 			server_selector.selectedKeys().clear();
 		}

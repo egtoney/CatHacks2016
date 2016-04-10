@@ -7,10 +7,12 @@ import java.util.List;
 public class StringModificationTree {
 	
 	public static void main( String[] args ){
-		StringModificationTree string = new StringModificationTree( System.currentTimeMillis()-1000, "" );
+		StringModificationTree string = new StringModificationTree( System.currentTimeMillis(), "" );
 		
 		string.applyTransformation( new StringNode( System.currentTimeMillis(), 0, "Hello World" ) );
-		string.applyTransformation( new StringNode( System.currentTimeMillis()-500, 0, "a" ) );
+		string.applyTransformation( new StringNode( System.currentTimeMillis(), 0, "a" ) );
+		string.applyTransformation( new StringNode( System.currentTimeMillis(), 3, "a" ) );
+		string.applyTransformation( new StringNode( System.currentTimeMillis(), 3, 1 ) );
 		
 		
 		StringNode curr_node = string.root_node;
@@ -69,7 +71,7 @@ public class StringModificationTree {
 				break;
 			
 			default: // merge the two or more children nodes
-				root_node = merge( root_node, root_node.children );
+//				root_node = merge( root_node, root_node.children );
 				break;
 			}
 		}
@@ -133,29 +135,48 @@ public class StringModificationTree {
 		 * Apply transform node before this transform
 		 * @param node
 		 */
-		public void applyTransform(StringNode node) {
-			int a = mod_loc;
-			int b = a + length;
-			int c = node.mod_loc;
-			int d = c + node.mod_loc;
-			
-			if( b < c ){ // to the left of node
-				// do nothing
-				
-			}else if( b < d ){
-				if( a > c ){ // inside of node
-					mod_loc += node.length;
-					
-				}else{ // left overlap with node
-					// do nothing
-					
+		public void applyTransform( StringNode node ) {
+			int a = node.mod_loc; // 3
+			int b = a + node.length; // 4
+			int c = mod_loc; // 0
+			int d = c + length; // 0
+			if( node.mod_type == ADDITION ){					// first operation is ADDITION	
+				if( mod_type == ADDITION ){				//second operation is ADDITION done
+					if( b <= c ){
+						mod_loc += node.length;
+					}
+				} else {										// second operation is DELETION done
+					if( b <= c ){
+						mod_loc += node.length;
+					}else if( a >= c && a < d ){
+						length += node.length;
+					}
 				}
-			}else if( a < d ){ // right overlap with node
-				mod_loc += node.length;
-				
-			}else{ // to the right of node
-				mod_loc += node.length;
-				
+			} else {									// first operation is DELETION
+				if( mod_type == ADDITION ){				// second operation is ADDITION 
+					if( b <= c ){
+						mod_loc -= node.length;
+					} else if( a < c ){
+						mod_loc -= c - a;
+					}
+				} else {											// second operation is DELETION done
+					if( b <= c ){
+						mod_loc -= node.length;
+					} else if( a <= c ){
+						if( b < d ){
+							mod_loc -= c - a;
+							length -= b - c;
+						} else {
+							length = 0;
+						}
+					} else if( a < d ) {
+						if( b < d ){
+							length -= b - a;
+						} else {
+							length -= d - a;
+						}
+					}
+				}
 			}
 		}
 
