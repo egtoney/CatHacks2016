@@ -1,5 +1,11 @@
 import sublime, sublime_plugin, threading, socket, json, ssl, re, hashlib, sys, time, select
 
+handler = Handler()
+absolutePath = ""
+time_diff_with_server = 0
+current_milli_time = lambda: int(round(time.time() * 1000)) + time_diff_with_server
+fileNameList = []
+
 class ModificationListener(sublime_plugin.EventListener):
 	prev_pos = {}
 
@@ -42,17 +48,16 @@ class ModificationListener(sublime_plugin.EventListener):
 
 	def on_post_save(self, view):
 		if handler.client.connected:
-			print("In post save")
-			current_file = view.file_name()
-			if current_file[0] != '/':
-				sub_string = current_file[4:]
-				self.parsed_path = sub_string.split('\\')
-			else:
-				self.parsed_path = current_file.split('/')
+			current_file = view.file_name()[len(absolutePath) + 1:]
+			# if current_file[0] != '/':
+			# 	sub_string = current_file[4:]
+			# 	self.parsed_path = sub_string.split('\\')
+			# else:
+			# 	self.parsed_path = current_file.split('/')
 
 			if current_file not in fileNameList:
 				fileNameList.append(current_file)
-				handler.addNewFile(current_file[len(absolutePath):], view.substr(sublime.Region(0, view.size())))
+				handler.addNewFile(current_file, view.substr(sublime.Region(0, view.size())))
 
 class killConnectionCommand(sublime_plugin.TextCommand):
 	def run(self, view):
@@ -71,7 +76,8 @@ class addProjectCommand(sublime_plugin.TextCommand):
 
 class syncFolderWithServerCommand(sublime_plugin.WindowCommand):
 	def run(self, paths=[]):
-		absolutePath = paths[0]
+		global absolutePath
+		absolutePath += paths[0] 
 		self.window.show_input_panel("Username Input:",
 			"", self.on_done1, None, None)
 
@@ -117,10 +123,12 @@ class Handler(object):
 		self.client.addNewFile(file_name, t_file)
 
 	def sendInsertion(self, insertion, position, filename):
-		self.client.sendInsertion(insertion, position, filename)
+		if filename in fileNameList:
+			self.client.sendInsertion(insertion, position, filename)
 
 	def sendDeletion(self, position, filename):
-		self.client.sendDeletion(position, filename)
+		if filename in fileNameList:
+			self.client.sendDeletion(position, filename)
 
 	def sendLogin(self, t_server_id, t_pwd, t_username):
 		return self.client.login(t_server_id, t_pwd, t_username)
@@ -136,6 +144,7 @@ class Handler(object):
 
 class Client(object):
 	proxy_ip = "10.20.216.10"
+	# proxy_ip = "10.20.216.10"
 	server_id = ''
 	port = 0
 	pwd = ''
@@ -182,15 +191,15 @@ class Client(object):
 		# msg = {
 		# 	'ID': self.MSG_ID_LOGIN,
 		# 	'server_id': self.session_id,
-		# 	'pwd': self.pwd,aa
-		# 	'username': self.usernamea
+		# 	'pwd': self.pwd,a
+		# 	'username': self.username
 		# }
 
 		msg = " { \"ID\":\"" + str(self.MSG_ID_LOGIN) + "\"," + "\"server_id\":\"" + self.session_id + "\"," + "\"pwd\":\"" + self.pwd + "\"," + "\"username\":\"" + self.username + "\"}"
 		
 		# self.ssl_sock.sendall(json.dumps(msg).encode('ascii'))
 		self.ssl_sock.sendall(msg.encode('ascii'))
-		# self.ssl_sock.flush()
+		# self.ssl_sock.flush()l
 		chunks = ""
 		while True:
 			chunk = str(self.ssl_sock.recv(1))
@@ -205,7 +214,12 @@ class Client(object):
 
 		if parsed_json['status'] == "1":
 			time_diff_with_server = int(parsed_json['server_time']) - current_milli_time()
-			print(str(time_diff_with_server))
+
+			for keys in parsed_json:
+				if key != "status" and key != "server_time" and key != "id":
+					f = open(key, 'w')
+					f.write(parsed_json[key])
+					f.close()
 
 			return True
 		else:
@@ -272,7 +286,7 @@ class Client(object):
 		# 	'username': usernamess
 		# }
 
-		msg = " { \"ID\":\"" + str(self.MSG_ID_NEW_FILE) + "\"," + "\"username\":\"" + self.username + "\"," + "\"filename\":\"" + filename + "\"," + "\"file\":\"" + re.escape(t_file) + "\"}"
+		msg = " { \"ID\":\"" + str(self.MSG_ID_NEW_FILE) + "\"," + "\"username\":\"" + self.username + "\"," + "\"filename\":\"" + filename + "\"," + "\"file_text\":\"" + re.escape(t_file) + "\"}"
 		# if self.ssl_sock.sendall(json.dumps(msg)) == None:
 		if self.ssl_sock.sendall(msg.encode('ascii')) == None:
 			return False
@@ -310,9 +324,3 @@ class readThread(threading.Thread):
 			raise
 		else:
 			handler.closeConnections()
-
-handler = Handler()
-absolutePath = ""
-time_diff_with_server = 0
-current_milli_time = lambda: int(round(time.time()) * 1000) + time_diff_with_server
-fileNameList = []
