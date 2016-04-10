@@ -1,0 +1,5 @@
+*.DS_Store
+*.log
+*/bin/*
+*.metadata
+*.recommenders
