@@ -1,6 +1,5 @@
 import sublime, sublime_plugin, threading, socket, json, ssl, re, hashlib, sys, time, select
 
-handler = Handler()
 absolutePath = ""
 time_diff_with_server = 0
 current_milli_time = lambda: int(round(time.time() * 1000)) + time_diff_with_server
@@ -63,6 +62,47 @@ class killConnectionCommand(sublime_plugin.TextCommand):
 	def run(self, view):
 		handler.closeConnections()
 
+class insertViewCommand(sublime_plugin.TextCommand):
+	def run(self, view):
+		views = self.window.views()
+		latest_info = handler.latest_info
+		timestamp = latest_info['timestamp']
+		text = latest_info['text']
+		pos = int(latest_info['pos'])
+		username = latest_info['username']
+		filename = latest_info['filename']
+		for view in views:
+			if filename in view.file_name():
+				edit = view.begin_edit()
+				view.insert(edit, pos, text) 
+				view.end_edit(edit)
+				view.sel().clear()
+				view.sel().add(sublime.Region(pos))
+				break
+			else:
+				pass
+
+class deleteViewCommand(sublime_plugin.TextCommand):
+	def run(self, view):
+		views = sublime.Window.views()
+		latest_info = handler.latest_info
+		timestamp = latest_info['timestamp']
+		pos = int(latest_info['pos'])
+		length = latest_info['length']
+		username = latest_info['username']
+		filename = latest_info['filename']
+		for view in views:
+			if filename in view.file_name():
+				edit = view.begin_edit()
+				view.erase(edit,
+					sublime.Region(pos, pos+length))
+				view.end_edit(edit) 
+				view.sel().clear()
+				view.sel().add(sublime.Region(pos))
+				break
+			else:
+				pass
+
 class addProjectCommand(sublime_plugin.TextCommand):
 	def run(self, view):
 		current_project = self.view.window().project_file_name()
@@ -106,6 +146,7 @@ class syncFolderWithServerCommand(sublime_plugin.WindowCommand):
 
 class Handler(object):
 	current_project = ""
+	user_regions = {}
 
 	def __init__(self):
 		self.client = Client()
@@ -135,15 +176,59 @@ class Handler(object):
 
 	def localInsert(self, json_msg):
 		parsed_json = json.loads(json_msg)
+		self.latest_info = parsed_json
 		
-		if parsed_json['ID'] != "8":
-			insertion = parsed_json['insertion']
-			position = parsed_json['position']
+		if parsed_json['ID'] == "2":
+			timestamp = parsed_json['timestamp']
+			text = parsed_json['text']
+			pos = int(parsed_json['pos'])
+			username = parsed_json['username']
+			filename = parsed_json['filename']
+			if user_regions.has_key(username):
+				new_region = sublime.Region(pos, len(text)+pos)
+				for region in user_regions[username]:
+					if(region.intersects(new_region)):
+						region = region.cover(new_region)
+						break
+			else:
+				regions = []
+				regions.append(sublime.Region(pos, len(text)+pos))
+				user_regions[username] = regions
+
+			views = sublime.Window.views()
+			for view in views:
+				if filename in view.file_name():
+					edit = view.begin_edit()
+					view.insert(edit, pos, text) 
+					view.end_edit(edit)
+					view.sel().clear()
+					view.sel().add(sublime.Region(pos))
+					break
+				else:
+					pass
+
+		elif parsed_json['ID'] == "6":
+			timestamp = parsed_json['timestamp']
+			pos = int(parsed_json['pos'])
+			length = parsed_json['length']
 			username = parsed_json['username']
 			filename = parsed_json['filename']
 
+			views = sublime.Window.views()
+			for view in views:
+				if filename in view.file_name():
+					edit = view.begin_edit()
+					view.erase(edit,
+						sublime.Region(pos, pos+length))
+					view.end_edit(edit) 
+					view.sel().clear()
+					view.sel().add(sublime.Region(pos))
+					break
+				else:
+					pass
+
 class Client(object):
-	proxy_ip = "10.20.216.10"
+	proxy_ip = "10.20.248.183"
 	# proxy_ip = "10.20.216.10"
 	server_id = ''
 	port = 0
@@ -215,7 +300,7 @@ class Client(object):
 		if parsed_json['status'] == "1":
 			time_diff_with_server = int(parsed_json['server_time']) - current_milli_time()
 
-			for keys in parsed_json:
+			for key in parsed_json:
 				if key != "status" and key != "server_time" and key != "id":
 					f = open(key, 'w')
 					f.write(parsed_json[key])
@@ -324,3 +409,5 @@ class readThread(threading.Thread):
 			raise
 		else:
 			handler.closeConnections()
+
+handler = Handler()
