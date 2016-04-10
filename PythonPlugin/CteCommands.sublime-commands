@@ -1,0 +1,4 @@
+[
+	{ "caption": "Connect to server", "command": "connect_server" },
+	{ "caption": "Close connection", "command": "kill_connection"}
+]
