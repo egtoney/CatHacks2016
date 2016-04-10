@@ -1,0 +1,19 @@
+package com.cathacks2016.proxy;
+
+public class ProxyServer {
+
+	public static void main( String[] args ){
+		
+	}
+	
+	private class ServerConnectionListener implements Runnable{
+
+		@Override
+		public void run() {
+			// TODO Auto-generated method stub
+			
+		}
+		
+	}
+	
+}

@@ -1,0 +1,179 @@
+package com.cathacks2016.proxy.networking;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
+import java.nio.channels.SocketChannel;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
+
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+
+public class NetworkEngine {
+	
+	/*
+	 * Login Server Message Constants
+	 */
+	public static final int LOGIN_SERVER_MSG_ID_ATTEMPT_LOGIN = 0;
+	public static final int LOGIN_SERVER_MSG_ID_GET_SALT = 1;
+	public static final int LOGIN_SERVER_MSG_ID_CREATE_NEW_PLAYER = 2;
+	public static final int LOGIN_SERVER_MSG_ID_CLIENT_CONNECTED = 3;
+	public static final int LOGIN_SERVER_MSG_ID_CLIENT_DISCONNECTED = 4;
+	public static final int LOGIN_SERVER_MSG_ID_VALIDATE_ACCOUNT_ACCESS_KEY = 5;
+	public static final int LOGIN_SERVER_MSG_ID_VALIDATE_COMMUNICATION_ACCESS_KEY = 6;
+	
+	/*
+	 * Communication Server Message Constants
+	 */
+	public static final int COMM_SERVER_MSG_ID_SEND_MESSAGE = 100;
+	public static final int COMM_SERVER_MSG_ID_WHOAMI = 101;
+	public static final int COMM_SERVER_MSG_DEST_GAME_MANAGER = 102;
+	
+	/*
+	 * Account Server Message Constants
+	 */
+	public static final int ACCOUNT_SERVER_MSG_ID_WHOAMI = 200;
+	
+	/*
+	 * Game Server Message Constants
+	 */
+	public static final int GAME_SERVER_MSG_ID_WHOAMI = 300;
+	public static final int GAME_SERVER_MSG_ID_UPDATE_PLAYER_DATA = 301;
+	public static final int GAME_SERVER_MSG_ID_UPDATE_MULTI_PLAYER_DATA = 302;
+	
+	/*
+	 * Common Server Messages
+	 */
+	public static final int MSG_ID_PLAYER_LOGGED_IN = 400;
+	public static final int MSG_ID_PLAYER_LOGGED_OUT = 401;
+
+	/*
+	 * Server information
+	 */
+	protected static final String LOGIN_SERVER_INET_ADDRESS = "10.20.221.152";
+	protected static final int LOGIN_SERVER_PORT = 9010;
+	protected static final String ACCOUNT_SERVER_INET_ADDRESS = "10.20.221.152";
+	protected static final int ACCOUNT_SERVER_PORT = 9011;
+	protected static final String COMM_SERVER_INET_ADDRESS = "10.20.221.152";
+	protected static final int COMM_SERVER_PORT = 9012;
+	protected static final String GAME_SERVER_INET_ADDRESS = "10.20.221.152";
+	protected static final int GAME_SERVER_PORT = 9013;
+	
+	protected static final int TIMEOUT = 1000; //ms
+	
+	/*
+	 * Keystore information
+	 */
+	private final String CLIENT_KEYSTORE_LOCATION = "security/charon_client.jks";
+	private final String KEYSTORE_PASSWORD = "yyPX4v5s-^27+2HGz@Uj*QMvq$qc+6K6c-HNHTjS$b@_WkfuLvyk$zB*Vmp%sKWg";
+	private final String CERTIFICATE_PASSWORD = "Q2H5m=?PvsnQM@Jc9W*bVQNnp3j^XrmCaJWtKHNDyY_PEcU$A-?t228sTP48SM9+";
+
+	/*
+	 * SSL variables
+	 */
+	private SSLSocketFactory ssl_creator;
+	private SSLContext ssl_context;
+	
+	/**
+	 * Create a new NetworkEngine instance and creates the necessary SocketFactories with the given keystores
+	 */
+	public NetworkEngine(){
+		try {
+			KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+			keyStore.load(new FileInputStream(CLIENT_KEYSTORE_LOCATION), KEYSTORE_PASSWORD.toCharArray());
+			KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
+			keyManagerFactory.init(keyStore, CERTIFICATE_PASSWORD.toCharArray());
+
+			KeyManager keyManagers[] = keyManagerFactory.getKeyManagers();
+
+			TrustManager trustManagers[] = { new SelfTrustManager(keyStore) };
+
+			ssl_context = SSLContext.getInstance("TLS");
+			ssl_context.init(keyManagers, trustManagers, new SecureRandom());
+			
+			ssl_creator = ssl_context.getSocketFactory();
+			
+		} catch (KeyStoreException | NoSuchAlgorithmException | CertificateException | IOException | UnrecoverableKeyException | KeyManagementException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	/**
+	 * Creates a SSLSocket connection to the login server
+	 * 
+	 * @return blocking SSLSocket
+	 * @throws IOException 
+	 * @throws UnknownHostException 
+	 */
+	protected SSLSocket connectToLoginServer() throws IOException {
+		SSLSocket socket = (SSLSocket) ssl_creator.createSocket();
+		socket.connect( new InetSocketAddress(LOGIN_SERVER_INET_ADDRESS, LOGIN_SERVER_PORT), TIMEOUT);
+		socket.startHandshake();
+		return socket;
+	}
+	
+	/**
+	 * Creates a SSLSocket connection to the account server
+	 * 
+	 * @return non-blocking SocketChannel
+	 * @throws IOException
+	 */
+	protected SocketChannel connectToAccountServer() throws IOException {
+		SocketChannel account_socket_channel;
+		account_socket_channel = SocketChannel.open();
+		account_socket_channel.configureBlocking(true);
+		account_socket_channel.connect(new InetSocketAddress(ACCOUNT_SERVER_INET_ADDRESS, ACCOUNT_SERVER_PORT));
+		account_socket_channel.configureBlocking(false);
+		return account_socket_channel;
+	}
+	
+	/**
+	 * Creates a SSLSocket connection to the communication server
+	 * 
+	 * @return non-blocking SocketChannel
+	 * @throws IOException
+	 */
+	protected SocketChannel connectToCommServer() throws IOException {
+		SocketChannel comm_socket_channel;
+		comm_socket_channel = SocketChannel.open();
+		comm_socket_channel.configureBlocking(true);
+		comm_socket_channel.connect(new InetSocketAddress(COMM_SERVER_INET_ADDRESS, COMM_SERVER_PORT));
+		comm_socket_channel.configureBlocking(false);
+		return comm_socket_channel;
+	}
+	
+	/**
+	 * Creates a SSLSocket connection to the communication server
+	 * 
+	 * @return non-blocking SocketChannel
+	 * @throws IOException
+	 */
+	protected SocketChannel connectToGameServer() throws IOException {
+		SocketChannel game_socket_channel;
+		game_socket_channel = SocketChannel.open();
+		game_socket_channel.configureBlocking(true);
+		game_socket_channel.connect(new InetSocketAddress(GAME_SERVER_INET_ADDRESS, GAME_SERVER_PORT));
+		game_socket_channel.configureBlocking(false);
+		return game_socket_channel;
+	}
+	
+	/**
+	 * Returns the ssl_context
+	 * @return SSLContext
+	 */
+	public SSLContext getSSLContext() {
+		return ssl_context;
+	}
+	
+}

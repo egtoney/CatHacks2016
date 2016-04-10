@@ -1,0 +1,23 @@
+package com.cathacks2016.proxy;
+
+import java.io.IOException;
+import java.net.Socket;
+import java.util.HashMap;
+
+public class ProxyServer {
+	
+	public static final int PROXY_SERVER_PORT = 22754;
+
+	public static void main( String[] args ){
+		try {
+			HashMap< String, Socket > socket_map = new HashMap<>();
+			
+			ServerConnectionListener server = new ServerConnectionListener( socket_map );
+			
+			server.start();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+}

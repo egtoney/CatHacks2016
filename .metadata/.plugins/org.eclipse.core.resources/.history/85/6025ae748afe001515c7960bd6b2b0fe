@@ -1,0 +1,52 @@
+package com.cathacks2016.proxy;
+
+import java.io.IOException;
+import java.math.BigInteger;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.security.SecureRandom;
+import java.util.HashMap;
+import java.util.Vector;
+
+import javax.net.ServerSocketFactory;
+import javax.net.ssl.SSLServerSocketFactory;
+
+class ServerConnectionListener extends Thread{
+
+	private static SecureRandom random = new SecureRandom();
+
+	private final HashMap< String, ServerConnection > socket_map;
+	private final ServerSocket server_socket;
+
+	public ServerConnectionListener( HashMap<String, ServerConnection> server_socket_map ) throws IOException{
+		ServerSocketFactory ssocketFactory = SSLServerSocketFactory.getDefault();
+	    server_socket = ssocketFactory.createServerSocket(Runner.PROXY_SERVER_PORT);
+	    this.socket_map = server_socket_map;
+	}
+
+	public String nextSessionId() {
+		return new BigInteger(130, random).toString(32);
+	}
+	
+	@Override
+	public void run() {
+		while( true ){
+			try {
+				Socket new_socket = server_socket.accept();
+				
+				ServerConnection new_connection = new ServerConnection( new_socket );
+				
+				String id = "default";
+				while( !socket_map.containsKey(id) ){
+					id = nextSessionId();
+				}
+				
+				socket_map.put( id, new_connection );
+				
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+}

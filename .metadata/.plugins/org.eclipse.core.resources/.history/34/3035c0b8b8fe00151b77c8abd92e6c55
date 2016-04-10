@@ -1,0 +1,297 @@
+package com.cathacks2016.proxy;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.channels.ServerSocketChannel;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
+import java.util.HashMap;
+
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.SSLServerSocketFactory;
+import javax.net.ssl.TrustManager;
+
+import org.json.simple.JSONObject;
+
+import com.charon.global.error.ErrorHandler;
+import com.charon.global.network.NetworkEngine;
+import com.charon.global.network.SelfTrustManager;
+import com.charon.server.security.ServerSystems;
+public class ServerNetwork extends NetworkEngine{
+
+	/*
+	 * Security variables
+	 */
+	private final String SERVER_KEYSTORE_LOCATION = "security/charon_server.jks";
+	private final String KEYSTORE_PASSWORD = "#Ry@uL?P@r+xydc$9Zy9etuVsHsXx*qaDG!_XL_RL2TxHE6yJ8VFFjCfxa5a3-zw";
+	private final String CERTIFICATE_PASSWORD = "Q2H5m=?PvsnQM@Jc9W*bVQNnp3j^XrmCaJWtKHNDyY_PEcU$A-?t228sTP48SM9+";
+	
+	private SSLServerSocketFactory ssl_server_creator;
+
+	/*
+	 * Server variables
+	 */
+	private static SSLServerSocket login_server_socket;
+	private static HashMap<String, LoginServer> login_servers = new HashMap<String, LoginServer>();
+	private static ServerSocketChannel game_server_socket_channel;
+	private static HashMap<String, GameServer> game_servers = new HashMap<String, GameServer>();
+	private static ServerSocketChannel account_server_socket_channel;
+	private static HashMap<String, AccountServer> account_servers = new HashMap<String, AccountServer>();
+	private static ServerSocketChannel comm_server_socket_channel;
+	private static HashMap<String, CommunicationServer> comm_servers = new HashMap<String, CommunicationServer>();
+	private SSLContext ssl_context;
+
+	/*
+	 * State variables
+	 */
+	private final ServerSystems server_systems;
+	private final NetworkSecurity network_security_system;
+	
+	/**
+	 * Initializes the SSLServerSocketFactory and loads in all of the private-public key info
+	 * 
+	 * @param serverSystems
+	 */
+	public ServerNetwork(ServerSystems serverSystems) {
+		super();
+		server_systems = serverSystems;
+		
+		network_security_system = new NetworkSecurity();
+		
+		
+		/*
+		 * Load in the SSL certificates
+		 */
+		try {
+			KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+			keyStore.load(new FileInputStream(SERVER_KEYSTORE_LOCATION), KEYSTORE_PASSWORD.toCharArray());
+
+			KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
+			keyManagerFactory.init(keyStore, CERTIFICATE_PASSWORD.toCharArray());
+			
+			KeyManager keyManagers[] = keyManagerFactory.getKeyManagers();
+
+			TrustManager trustManagers[] = { new SelfTrustManager(keyStore) };
+			
+			ssl_context = SSLContext.getInstance("TLS");
+			ssl_context.init(keyManagers, trustManagers, new SecureRandom());
+			
+			ssl_server_creator = ssl_context.getServerSocketFactory();
+			
+		} catch (KeyStoreException | NoSuchAlgorithmException | CertificateException | IOException | UnrecoverableKeyException | KeyManagementException e) {
+			ErrorHandler.catchError(e);
+		}
+	}
+
+	/**
+	 * Sets up the login server
+	 * @throws IOException 
+	 */
+	public void initLoginServers() throws IOException {
+		int NUMBER_OF_BUCKETS = 1;
+		
+		login_server_socket = (SSLServerSocket) ssl_server_creator.createServerSocket(LOGIN_SERVER_PORT);
+		
+		for( int i=0 ; i<NUMBER_OF_BUCKETS ; i++ ){
+			String threadID = "Login Server Thread ("+i+")";
+			login_servers.put(threadID, new LoginServer(server_systems, login_server_socket, threadID));
+		}	
+	}
+
+	/**
+	 * Sets up the account server
+	 * @throws IOException
+	 */
+	public void initAccountServers() throws IOException {
+		int NUMBER_OF_BUCKETS = 1;
+		
+		InetSocketAddress inet_socket_address = new InetSocketAddress("localhost", ACCOUNT_SERVER_PORT);
+		
+		try {
+			account_server_socket_channel = ServerSocketChannel.open();
+			account_server_socket_channel.configureBlocking(false);
+			account_server_socket_channel.socket().bind(inet_socket_address, 50);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return;
+		}
+		
+		for( int i=0 ; i<NUMBER_OF_BUCKETS ; i++ ){
+			String threadID = "Account Server Thread ("+i+")";
+			account_servers.put(threadID, new AccountServer(server_systems, ssl_context, account_server_socket_channel, threadID));
+		}	
+	}
+	
+	/**
+	 * Sets up the communication accept server
+	 * @throws IOException
+	 */
+	public void initCommServers() throws IOException {
+		int NUMBER_OF_BUCKETS = 1;
+		
+		InetSocketAddress inet_socket_address = new InetSocketAddress("localhost", COMM_SERVER_PORT);
+		
+		try {
+			comm_server_socket_channel = ServerSocketChannel.open();
+			comm_server_socket_channel.configureBlocking(false);
+			comm_server_socket_channel.socket().bind(inet_socket_address, 50);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return;
+		}
+		
+		for( int i=0 ; i<NUMBER_OF_BUCKETS ; i++ ){
+			String threadID = "Communication Server Thread ("+i+")";
+			comm_servers.put(threadID, new CommunicationServer(server_systems, ssl_context, comm_server_socket_channel, threadID));
+		}		
+	}
+	
+	/**
+	 * Sets up the game server
+	 * @param server_systems 
+	 */
+	public void initGameServers() {
+		int NUMBER_OF_BUCKETS = 2;
+		
+		InetSocketAddress inet_socket_address = new InetSocketAddress("localhost", GAME_SERVER_PORT);
+		
+		try {
+			game_server_socket_channel = ServerSocketChannel.open();
+			game_server_socket_channel.configureBlocking(false);
+			game_server_socket_channel.socket().bind(inet_socket_address, 50);
+		} catch (IOException e) {
+			e.printStackTrace();
+			return;
+		}
+		
+		for( int i=0 ; i<NUMBER_OF_BUCKETS ; i++ ){
+			String threadID = "Game Server Thread ("+i+")";
+			game_servers.put( threadID, new GameServer(server_systems, game_server_socket_channel, threadID) );
+		}		
+	}
+
+	/**
+	 * Starts up the login servers
+	 */
+	public void startLoginServers() {
+		for( LoginServer login_server : login_servers.values() )
+			login_server.start();
+	}
+
+	/**
+	 * Starts up the game servers
+	 */
+	public void startGameServers() {
+		for( GameServer game_server : game_servers.values() )
+			game_server.start();
+	}
+
+	/**
+	 * Starts up the account servers
+	 */
+	public void startAccountServers() {
+		for( AccountServer account_server : account_servers.values() )
+			account_server.start();
+	}
+	
+	/**
+	 * Starts up the communication servers
+	 */
+	public void startCommServers() {
+		for( CommunicationServer comm_server : comm_servers.values() )
+			comm_server.start();
+	}
+
+	/**
+	 * Stops all of the Login Servers that are currently running
+	 */
+	public void stopLoginServers() {
+		for( LoginServer login_server : login_servers.values() )
+			login_server.stopLoginServer();
+		
+		try {
+			login_server_socket.close();
+		} catch (IOException e) {} //silently ignore
+	}
+	
+	/**
+	 * Stops all of the Account Servers that are currently running
+	 */
+	public void stopAccountServers() {
+		for( AccountServer account_server : account_servers.values() )
+			account_server.stopAccountServer();
+		
+		try {
+			account_server_socket_channel.close();
+		} catch (IOException e) {} //silently ignore
+	}
+	
+	/**
+	 * Stops all of the Communication Servers that are currently running
+	 */
+	public void stopCommServers() {
+		for( CommunicationServer comm_server : comm_servers.values() )
+			comm_server.stopCommunicationServer();
+		
+		try {
+			comm_server_socket_channel.close();
+		} catch (IOException e) {} //silently ignore
+	}
+	
+	/**
+	 * Stops all of the Game Servers that are currently running
+	 */
+	public void stopGameServers() {
+		for( GameServer game_server : game_servers.values() )
+			game_server.stopGameServer();
+		
+		try {
+			game_server_socket_channel.close();
+		} catch (IOException e) {} //silently ignore
+	}
+	
+	/**
+	 * Stops all of the servers that are currently running
+	 */
+	public void stopAllServers() {
+		this.stopLoginServers();
+		this.stopAccountServers();
+		this.stopCommServers();
+		this.stopGameServers();
+	}
+	
+	/**
+	 * Returns a 15 character long Base64 encoded access key
+	 * @return access key
+	 */
+	public String getAccessKey() {
+		return network_security_system.getAccessKey();
+	}
+	
+	/**
+	 * Sends a message to the players through the communication server 
+	 */
+	public void sendMessageToPlayers(JSONObject json, boolean from_server) {
+		for( CommunicationServer comm_server : comm_servers.values() )
+			comm_server.sendMessageToPlayers(json, from_server);
+	}
+	
+	/**
+	 * Checks to see if access key was valid
+	 * @param key
+	 * @return true if access key was valid
+	 */
+	public boolean isValidAccessKey(String key) {
+		return network_security_system.isValidAccessKey(key);
+	}
+
+}

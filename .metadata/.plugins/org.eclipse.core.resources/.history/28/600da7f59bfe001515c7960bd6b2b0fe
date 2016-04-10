@@ -1,0 +1,23 @@
+package com.cathacks2016.proxy;
+
+import java.util.HashMap;
+import java.util.Vector;
+
+public class ServerManager extends Thread{
+
+	private HashMap<String, ServerConnection> server_socket_map;
+	private HashMap<String, Vector<ClientConnection>> client_socket_map;
+
+	public ServerManager(HashMap<String, ServerConnection> server_socket_map, HashMap<String, Vector<ClientConnection>> client_socket_map) {
+		this.server_socket_map = server_socket_map;
+		this.client_socket_map = client_socket_map;
+	}
+	
+	@Override
+	public void run(){
+		while( true ){
+			
+		}
+	}
+
+}

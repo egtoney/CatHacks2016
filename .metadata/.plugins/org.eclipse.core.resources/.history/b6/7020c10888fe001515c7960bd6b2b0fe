@@ -1,0 +1,25 @@
+package com.cathacks2016.proxy;
+
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
+
+import javax.net.ServerSocketFactory;
+import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.SSLServerSocketFactory;
+
+public class ProxyServer {
+	
+	public static final int PROXY_SERVER_PORT = 22754;
+
+	public static void main( String[] args ){
+		try {
+			ServerConnectionListener server = new ServerConnectionListener();
+			
+			
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+}

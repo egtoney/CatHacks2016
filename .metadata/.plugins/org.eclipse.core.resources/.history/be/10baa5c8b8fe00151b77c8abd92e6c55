@@ -1,0 +1,11 @@
+package com.cathacks2016.proxy;
+
+import com.cathacks2016.proxy.networking.ProxyServer;
+
+public class Runner {
+
+	public static void main( String[] args ){
+		new ProxyServer();
+	}
+	
+}

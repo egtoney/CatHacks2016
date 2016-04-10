@@ -1,0 +1,49 @@
+package com.cathacks2016.proxy.networking;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.channels.ServerSocketChannel;
+import java.util.HashMap;
+import java.util.Vector;
+
+import com.cathacks2016.proxy.networking.ssl.SSLClientSession;
+
+public class ThreadedServerBucket {
+
+	private HashMap<String, ServerBucket> buckets = new HashMap<>();
+	private int next_thread_id = 0;
+	
+	public ThreadedServerBucket( ServerSocketChannel server_socket_channel ) {
+		comm_servers.put(threadID, new CommunicationServer(server_systems, ssl_context, comm_server_socket_channel, threadID));
+		
+		// Create base thread
+		buckets.add( new ServerBucket() );
+		
+		
+		
+	}
+	
+	private class ServerBucket extends Thread{
+		
+		public static final int CAPACITY = 100;
+		private final Vector<SSLClientSession> connections = new Vector<>();
+		
+		public ServerBucket() {
+			super("Communication Server Thread ("+(next_thread_id++)+")");
+			
+		}
+		
+		@Override
+		public void run(){
+			while( true ){
+				// Check for new connections
+				
+				
+				// Check for new messages
+				
+			}
+		}
+		
+	}
+	
+}

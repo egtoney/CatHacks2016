@@ -1,0 +1,58 @@
+package com.cathacks2016.proxy;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.net.Socket;
+
+public class ClientConnection {
+
+	private final Socket connection;
+	private final BufferedReader in;
+	private final BufferedWriter out;
+	
+	private String server_id;
+	
+	public ClientConnection( Socket connection ) throws IOException{
+		this.connection = connection;
+		
+		in = new BufferedReader( new InputStreamReader( connection.getInputStream() ));
+		out = new BufferedWriter( new OutputStreamWriter( connection.getOutputStream() ));
+	}
+	
+	public void close() throws IOException{
+		connection.close();
+	}
+
+	public String getServer() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	public void update() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	public void failedServerConnection() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	public void successfulServerConnection() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	public boolean outOfTime() {
+		// TODO Auto-generated method stub
+		return false;
+	}
+
+	public boolean connected() {
+		return !connection.isClosed();
+	}
+	
+}

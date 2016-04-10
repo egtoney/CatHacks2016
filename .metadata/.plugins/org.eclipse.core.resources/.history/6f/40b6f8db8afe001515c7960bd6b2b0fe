@@ -1,0 +1,5 @@
+package com.cathacks2016.proxy;
+
+public class DefaultClientManager {
+
+}

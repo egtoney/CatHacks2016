@@ -1,0 +1,34 @@
+package com.cathacks2016.proxy.networking;
+
+import java.util.Vector;
+
+import com.cathacks2016.proxy.networking.ssl.SSLClientSession;
+
+public class ThreadedServerBucket {
+
+	private Vector<ServerBucket> buckets = new Vector<>();
+	
+	public ThreadedServerBucket() {
+		// Create base thread
+		buckets.add( new ServerBucket() );
+		
+		
+	}
+	
+	private class ServerBucket extends Thread{
+		
+		public static final int CAPACITY = 100;
+		private final Vector<SSLClientSession> connections = new Vector<>();
+		
+		public ServerBucket() {
+			
+		}
+		
+		@Override
+		public void run(){
+			
+		}
+		
+	}
+	
+}

@@ -1,0 +1,28 @@
+package com.cathacks2016.proxy.test;
+
+import java.net.Socket;
+
+public class ServerConnection {
+
+	private Socket connection;
+	private String server_id;
+
+	public ServerConnection(Socket new_socket) {
+		this.connection = connection;
+	}
+
+	public boolean isConnected() {
+		return connection.isConnected();
+	}
+
+	public void update() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	public Object getClients() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+}

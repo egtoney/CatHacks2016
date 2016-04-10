@@ -1,0 +1,20 @@
+package com.cathacks2016.proxy;
+
+import java.util.HashMap;
+import java.util.Vector;
+
+public class DefaultClientManager extends Thread{
+
+	public DefaultClientManager(HashMap<String, ServerConnection> server_socket_map, HashMap<String, Vector<ClientConnection>> client_socket_map) {
+		
+	}
+	
+	@Override
+	public void run(){
+		while( true ){
+			// Check to see if a user in the default bucket it ready to be placed in a real bucket
+			
+		}
+	}
+
+}

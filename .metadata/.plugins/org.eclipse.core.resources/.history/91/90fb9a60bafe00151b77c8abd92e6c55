@@ -1,0 +1,17 @@
+package com.cathacks2016.proxy.networking;
+
+public class ThreadedServerBucket {
+
+	public ThreadedServerBucket( int thread_count ) {
+		
+	}
+	
+	private static class ServerBucket {
+		
+		public ServerBucket() {
+			
+		}
+		
+	}
+	
+}
