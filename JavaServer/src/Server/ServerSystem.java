@@ -28,6 +28,7 @@ import javax.net.ssl.TrustManager;
 import javax.swing.filechooser.FileSystemView;
 
 import SSL.SelfTrustManager;
+import Server.StringModificationTree.StringNode;
 
 
 public class ServerSystem {
@@ -51,7 +52,7 @@ public class ServerSystem {
 		ServerSystem serverSystem = new ServerSystem();
 	}
 	
-	private HashMap<String, StringBuilder> openFiles;
+	private HashMap<String, StringModificationTree> openFiles;
 	private HashMap<String, String> filePathNames;
 	
 	private ConcurrentServer commServer; 
@@ -92,7 +93,7 @@ public class ServerSystem {
 			
 			sslSocketFactory = sslContext.getServerSocketFactory();
 			
-			initCommServer();
+			initConcurrentServer();
 			
 		} catch (KeyStoreException | NoSuchAlgorithmException | CertificateException | IOException | UnrecoverableKeyException | KeyManagementException e) {
 			System.out.println(e.getMessage());
@@ -130,8 +131,8 @@ public class ServerSystem {
 	 * Sets up the communication accept server
 	 * @throws IOException
 	 */
-	public void initCommServer() throws IOException {
-		InetSocketAddress inet_socket_address = new InetSocketAddress(COMM_SERVER_INET_ADDRESS, COMM_SERVER_PORT);
+	public void initConcurrentServer() throws IOException {
+		InetSocketAddress inet_socket_address = new InetSocketAddress(SERVER_INET_ADDRESS, SERVER_PORT);
 		
 		try {
 			commServerSocketChannel = ServerSocketChannel.open();
@@ -142,22 +143,25 @@ public class ServerSystem {
 			return;
 		}
 		
-		commServer = new ConcurrentServer(this, sslContext, commServerSocketChannel, "Thread 0");	
+		commServer = new ConcurrentServer(this, sslContext, commServerSocketChannel, "Thread 0");
+		
+		commServer.start();
 	}
 	
-	private HashMap<String, StringBuilder> loadFiles() { 
-		HashMap<String, StringBuilder> files = new HashMap<String, StringBuilder>();
+	private HashMap<String, StringModificationTree> loadFiles() { 
+		HashMap<String, StringModificationTree> files = new HashMap<>();
 		
 		String[] fileList = fileDirectory.list();
+		long file_loaded_time = System.currentTimeMillis();
 		
 		for(String f : fileList) {
 			String name = f.substring(f.lastIndexOf(File.separator), f.length() - 1);
 			filePathNames.put(name, f);
 			
-			String fileAsString = readFile(f, Charset.defaultCharset());
+			StringModificationTree fileAsString = new StringModificationTree( file_loaded_time, readFile(f, Charset.defaultCharset()) );
 			
 			if(fileAsString != null)
-				files.put(name, new StringBuilder(fileAsString));
+				files.put(name, fileAsString);
 		}
 		
 		return files;
@@ -178,11 +182,35 @@ public class ServerSystem {
 		return new String(encoded, encoding);
 	}
 
+	public void addTextToFile( String file, long timestamp, int location, String text ){
+		if( openFiles.containsKey( file ) ){
+			openFiles.get(file).applyTransformation( new StringNode( timestamp, location, text ) );
+		}
+	}
 	
-	public void updateFile(String filename, String s, int pos, boolean add) {
-		if(add)
-			openFiles.put(filename, openFiles.get(filename).insert(pos, s));
-		else
-			openFiles.put(filename, openFiles.get(filename).delete(pos, s.length()));
+	public void removeTextFromFile( String file, long timestamp, int location, int length ){
+		if( openFiles.containsKey( file ) ){
+			openFiles.get(file).applyTransformation( new StringNode( timestamp, location, length ) );
+		}
+	}
+
+	public void createNewFile( String file ) {
+		if( !openFiles.containsKey( file ) ){
+			try {
+				String new_path = fileDirectory.getAbsolutePath() + file;
+				File new_file = new File( new_path );
+				
+				if( !new_file.exists() )
+					new_file.createNewFile();
+
+				StringModificationTree fileAsString = new StringModificationTree( System.currentTimeMillis(), readFile(new_file.getPath(), Charset.defaultCharset()) );
+				
+				openFiles.put(file, fileAsString);
+				
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
 	}
 }

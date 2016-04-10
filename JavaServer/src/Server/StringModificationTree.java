@@ -33,6 +33,11 @@ public class StringModificationTree {
 		root_node = new StringNode( start_time, 0, base_string );
 	}
 	
+	public String toString(){
+		simplify();
+		return root_node.data;
+	}
+	
 	public void applyTransformation( StringNode node ){
 		StringNode curr_node = root_node;
 		
@@ -106,7 +111,7 @@ public class StringModificationTree {
 		return new_node;
 	}
 
-	private static class StringNode implements Comparable<StringNode> {
+	public static class StringNode implements Comparable<StringNode> {
 		
 		public int mod_type = 0;
 		public long mod_time;

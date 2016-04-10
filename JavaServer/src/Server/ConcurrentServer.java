@@ -9,6 +9,8 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.net.ssl.SSLContext;
@@ -21,7 +23,7 @@ import org.json.simple.parser.ParseException;
 import SSL.SSLClientSession;
 import SSL.SSLSocketChannel;
 
-public class ConcurrentServer extends Thread implements Runnable{
+public class ConcurrentServer extends Thread{
 
 	private SSLContext ssl_context;
 	private ServerSocketChannel server_socket_channel;
@@ -70,6 +72,8 @@ public class ConcurrentServer extends Thread implements Runnable{
 			// Register for OP_READ with ssl_socket_channel as attachment
 			SelectionKey key = accepted_channel.register(server_selector, SelectionKey.OP_READ, session);
 
+			sendMessageToUser( "{\"id\":\"0\",\"session_id\":\"0000\"}", key, session );
+			
 			// Add client to open channels map
 			open_channels.put(key, session);
 			
@@ -96,7 +100,7 @@ public class ConcurrentServer extends Thread implements Runnable{
 			try {
 				String message = new String(request.array(),0,request.position());
 				
-//				OutputHandler.println("Server: read "+message);			
+				System.out.println("Server: read "+message);			
 				
 				// Parse the JSON message
 				JSONObject json = (JSONObject) parser.parse(message);
@@ -162,49 +166,53 @@ public class ConcurrentServer extends Thread implements Runnable{
 		
 		String username = (String) obj.get("username");
 		
-		switch(Integer.parseInt((String)obj.get("ID")))
+		switch( (int) (long) obj.get("ID") )
 		{
 			case ServerSystem.LOGIN:
-			{
-				((SSLClientSession)key.attachment()).setUsername(username);
-			}
+				{
+					((SSLClientSession)key.attachment()).setUsername(username);
+				}
+				break;
 		
 			case ServerSystem.NEW_FILE:
-			{
-				String filename = (String) obj.get("filename");
-				
-				
-			}
+				{
+					String filename = (String) obj.get("filename");	
+					
+					serverSystem.createNewFile( filename );
+				}
+				break;
 			
 			case ServerSystem.INSERT:
-			{
-				String filename = (String) obj.get("filename");
-				
-				serverSystem.updateFile(filename, (String) obj.get("string"), Integer.parseInt((String)obj.get("pos")), true);
-				sendMessageToAllUsers(username, obj);
-			}
+				{
+					String filename = (String) obj.get("filename");
+					long timestamp = (long) obj.get("timestamp");
+					int location = Integer.parseInt( (String) obj.get("pos") );
+					String text = (String) obj.get("text");
+					
+					serverSystem.addTextToFile( filename, timestamp, location, text );
+				}
+				break;
 			
 			case ServerSystem.DELETE:
-			{
-				String filename = (String) obj.get("filename");
-				
-				serverSystem.updateFile(filename, (String) obj.get("string"), Integer.parseInt((String)obj.get("pos")), false);
-				sendMessageToAllUsers(username, obj);
-			}
-			
-			case ServerSystem.PULL_CHANGES:
-			{
-				String filename = (String) obj.get("filename");
-				
-				
-			}
+				{
+					String filename = (String) obj.get("filename");
+					long timestamp = (long) obj.get("timestamp");
+					int location = Integer.parseInt( (String) obj.get("pos") );
+					int length = Integer.parseInt( (String) obj.get("length") );
+	
+					serverSystem.removeTextFromFile( filename, timestamp, location, length );
+				}
+				break;
 			
 			case ServerSystem.GET_FILE:
-			{
-				String filename = (String) obj.get("filename");
-				obj.put("file", serverSystem.getFile(filename));
-				sendMessageToUser(obj, key, (SSLClientSession)key.attachment());
-			}
+				{
+					String filename = (String) obj.get("filename");
+					
+					obj.put("file_text", serverSystem.getFile(filename));
+					
+					sendMessageToUser(obj, key, (SSLClientSession)key.attachment());
+				}
+				break;
 		}
 	}
 	
@@ -239,6 +247,16 @@ public class ConcurrentServer extends Thread implements Runnable{
 //		int count;
 		
 		System.out.println("Communication Server: engaged!");
+		
+		Timer t = new Timer();
+		t.scheduleAtFixedRate(new TimerTask(){
+
+			@Override
+			public void run() {
+				sendMessageToAllUsers("", "{}");
+			}
+			
+		}, 5000, 1000);
 		
 		while(running) { 
 			
@@ -289,7 +307,7 @@ public class ConcurrentServer extends Thread implements Runnable{
 		
 		try {
 			server_selector.close();
-			System.out.println("Communication server stopped.");
+			System.out.println("Concurrent server stopped.");
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -312,17 +330,17 @@ public class ConcurrentServer extends Thread implements Runnable{
 	public void sendMessageToAllUsers(String username, String message) {
 		
 		for(Map.Entry<SelectionKey, SSLClientSession> entry : open_channels.entrySet()) {
-			
-			if(!entry.getValue().getUsername().equals(username)) {
+			System.out.println(message);
+//			if(!entry.getValue().getUsername().equals(username)) {
 				try {
 					SelectionKey user_key = entry.getKey();
-					entry.getValue().out_messages.add(message);
+					entry.getValue().out_messages.add(message+"\n");
 					user_key.interestOps(user_key.interestOps() | SelectionKey.OP_WRITE);
 					server_selector.wakeup();
 				} catch (CancelledKeyException e) {
 					open_channels.remove(entry.getKey());
 				}
-			}
+//			}
 		}
 	}
 	
@@ -342,7 +360,7 @@ public class ConcurrentServer extends Thread implements Runnable{
 	 */
 	public void sendMessageToUser(String message, SelectionKey key, SSLClientSession session) {
 		try {
-			session.out_messages.add(message);
+			session.out_messages.add(message+"\n");
 			key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
 			server_selector.wakeup();
 		} catch (CancelledKeyException e) {
