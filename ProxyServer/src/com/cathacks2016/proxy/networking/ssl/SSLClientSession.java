@@ -1,11 +1,13 @@
 package com.cathacks2016.proxy.networking.ssl;
 
+import java.nio.channels.SelectionKey;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class SSLClientSession {
 	
 	private SSLSocketChannel ssl_socket_channel;
 	private String username = null;
+	private SelectionKey selection_key;
 	public ConcurrentLinkedQueue<String> out_messages = new ConcurrentLinkedQueue<String>();
 	public boolean rewrite = false;
 	
@@ -32,6 +34,14 @@ public class SSLClientSession {
 	 */
 	public SSLSocketChannel getSSLSocketChannel() {
 		return ssl_socket_channel;
+	}
+	
+	public SelectionKey getSelectionKey() {
+		return selection_key;
+	}
+	
+	public void setSelectionKey(SelectionKey key) {
+		selection_key = key;
 	}
 	
 	/**

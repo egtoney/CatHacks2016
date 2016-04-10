@@ -4,13 +4,13 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.CancelledKeyException;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.net.ssl.SSLContext;
@@ -30,6 +30,8 @@ public class ThreadedServerBucket {
 	private HashMap<String, ServerBucket> buckets = new HashMap<>();
 	private int next_thread_id = 0;
 	
+	private static final int LOGIN = 0;
+	
 	public ThreadedServerBucket( ServerSocketChannel server_socket_channel, SSLContext ssl_context ) {
 		this.server_socket_channel = server_socket_channel;
 		this.ssl_context = ssl_context;
@@ -38,17 +40,28 @@ public class ThreadedServerBucket {
 		ServerBucket initial_bucket = new ServerBucket();
 		buckets.put( initial_bucket.getName(), initial_bucket );
 		initial_bucket.start();
-		
 	}
 	
 	private class ServerBucket extends Thread{
 		
 		public static final int CAPACITY = 100;
-		private final Vector<SSLClientSession> connections = new Vector<>();
 		private Selector server_selector;
 		private boolean running = true;
-		private Map<SelectionKey, SSLClientSession> open_channels = new ConcurrentHashMap<SelectionKey, SSLClientSession>();
+		private SSLEngine ssl_engine;
+		
+		private Map<SSLSocketChannel, SSLClientSession> open_client_channels = new ConcurrentHashMap<SSLSocketChannel, SSLClientSession>();
+		private Map<SSLSocketChannel, SSLClientSession> open_java_server_channels = new ConcurrentHashMap<SSLSocketChannel, SSLClientSession>();
+		
+		/**
+		 * First SSLSocketChannel: Client channel
+		 * Second: Java Server Channel
+		 */
+		private Map<SSLSocketChannel, SSLSocketChannel> corresponding_channels = new ConcurrentHashMap<SSLSocketChannel, SSLSocketChannel>();
+		
 		private JSONParser parser = new JSONParser();
+		
+		private static final String JAVA_SERVER_INET_ADDRESS = "10.20.221.152";
+		private static final int JAVA_PORT = 22725;
 		
 		public ServerBucket() {
 			super("Communication Server Thread ("+(next_thread_id++)+")");
@@ -127,7 +140,7 @@ public class ThreadedServerBucket {
 			SSLClientSession session = ((SSLClientSession)key.attachment());
 			String username = session.getUsername();
 			
-			open_channels.remove(key); // remove the open channel
+			open_client_channels.remove(key); // remove the open channel
 			session.disconnect(); // shutdown the ssl socket channel
 			key.cancel(); //cancel the key
 			
@@ -148,7 +161,7 @@ public class ThreadedServerBucket {
 				accepted_channel.configureBlocking(false);
 				
 				//Create an SSL engine for this connection
-				SSLEngine ssl_engine = ssl_context.createSSLEngine("localhost", accepted_channel.socket().getPort());
+				ssl_engine = ssl_context.createSSLEngine("localhost", accepted_channel.socket().getPort());
 				ssl_engine.setUseClientMode(false);
 				
 				// Create a SSL Socket Channel for the channel & engine
@@ -159,9 +172,11 @@ public class ThreadedServerBucket {
 				
 				// Register for OP_READ with ssl_socket_channel as attachment
 				SelectionKey key = accepted_channel.register(server_selector, SelectionKey.OP_READ, session);
+				
+				session.setSelectionKey(key);
 
 				// Add client to open channels map
-				open_channels.put(key, session);
+				open_client_channels.put(ssl_socket_channel, session);
 				
 				System.out.println("Thread with ID - " + this.getName() + " - accepted a connection.");
 			}
@@ -250,26 +265,45 @@ public class ThreadedServerBucket {
 		 */
 		private void processNetworkMessage( JSONObject json, SelectionKey key ){
 			
+			SSLSocketChannel channel = null;
+			
 			//Switch statement based off of Network Message ID's
 			switch(Integer.parseInt((String)json.get("ID")))
 			{
-				case NetworkEngine.COMM_SERVER_MSG_ID_SEND_MESSAGE:
+				case LOGIN:
 				{
-					sendMessageToPlayers(json, false);
+					if(!corresponding_channels.containsKey(key)) {
+						int sessionID = Integer.parseInt((String)json.get("sessionID"));
+						String username = (String) json.get("username");
+						
+						try {
+							SocketChannel java_server_socket_channel = connectToJavaServer();
+							channel = registerSocketChannelForJavaServer(java_server_socket_channel, username);
+							
+							corresponding_channels.put(((SSLClientSession)key.attachment()).getSSLSocketChannel(), channel);
+							
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+					}
+					
 					break;
 				}
-				case NetworkEngine.COMM_SERVER_MSG_ID_WHOAMI:
+				
+				default:
 				{
-					String username = (String)json.get("username");
-					((SSLClientSession)key.attachment()).setUsername(username);
+					channel = ((SSLClientSession)key.attachment()).getSSLSocketChannel();
 					
-					// send message to players saying that the player logged in
-					JSONObject logged_in = new JSONObject();
-					logged_in.put("ID", Integer.toString(server_systems.network_engine.MSG_ID_PLAYER_LOGGED_IN));
-					logged_in.put("dest", Integer.toString(server_systems.network_engine.COMM_SERVER_MSG_DEST_GAME_MANAGER));
-					logged_in.put("username", username);
-					sendMessageToPlayers(logged_in, false);
 					break;
+				}
+			}
+			
+			if(channel != null) {
+				if(corresponding_channels.containsValue(channel)) {
+					sendMessageToUsers(json, channel);
+				} else {
+					sendMessageToJavaServer(json, channel);
 				}
 			}
 		}
@@ -279,8 +313,8 @@ public class ThreadedServerBucket {
 		 * @param (JSON) message
 		 * @param (boolean) true if it came from server
 		 */
-		public void sendMessageToPlayers(JSONObject json) {
-			sendMessageToPlayers(json.toString());
+		public void sendMessageToUsers(JSONObject json, SSLSocketChannel channel) {
+			sendMessageToUsers(json.toString(), channel);
 		}
 		
 		/**
@@ -288,15 +322,50 @@ public class ThreadedServerBucket {
 		 * @param (JSON String) message
 		 * @param (boolean) true if it came from server
 		 */
-		public void sendMessageToPlayers(String message) {
-			for(Map.Entry<SelectionKey, SSLClientSession> entry : open_channels.entrySet()) {
+		public void sendMessageToUsers(String message, SSLSocketChannel channel) {
+			for(Map.Entry<SSLSocketChannel, SSLSocketChannel> entry : corresponding_channels.entrySet()) {
 				try {
-					SelectionKey user_key = entry.getKey();
-					entry.getValue().out_messages.add(message);
-					user_key.interestOps(user_key.interestOps() | SelectionKey.OP_WRITE);
-					server_selector.wakeup();
+					SSLSocketChannel ssl_channel = entry.getValue();
+					if(!ssl_channel.equals(channel)) {
+						SSLClientSession sess = open_client_channels.get(ssl_channel);
+						SelectionKey key = sess.getSelectionKey();
+						sess.out_messages.add(message);
+						key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
+						server_selector.wakeup();
+					}
 				} catch (CancelledKeyException e) {
-					open_channels.remove(entry.getKey());
+					open_client_channels.remove(entry.getKey());
+				}
+			}
+		}
+		
+		/**
+		 * Sends a message to currently logged in players
+		 * @param (JSON) message
+		 * @param (boolean) true if it came from server
+		 */
+		public void sendMessageToJavaServer(JSONObject json, SSLSocketChannel channel) {
+			sendMessageToJavaServer(json.toString(), channel);
+		}
+		
+		/**
+		 * Sends a message to currently logged in players
+		 * @param (JSON String) message
+		 * @param (boolean) true if it came from server
+		 */
+		public void sendMessageToJavaServer(String message, SSLSocketChannel channel) {
+			for(Map.Entry<SSLSocketChannel, SSLSocketChannel> entry : corresponding_channels.entrySet()) {
+				try {
+					SSLSocketChannel ssl_channel = entry.getKey();
+					if(!ssl_channel.equals(channel)) {
+						SSLClientSession sess = open_java_server_channels.get(ssl_channel);
+						SelectionKey key = sess.getSelectionKey();
+						sess.out_messages.add(message);
+						key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
+						server_selector.wakeup();
+					}
+				} catch (CancelledKeyException e) {
+					open_client_channels.remove(entry.getKey());
 				}
 			}
 		}
@@ -309,6 +378,48 @@ public class ThreadedServerBucket {
 			this.running = false;
 		}
 		
+		/**
+		 * Creates a SSLSocket connection to the communication server
+		 * 
+		 * @return non-blocking SocketChannel
+		 * @throws IOException
+		 */
+		private SocketChannel connectToJavaServer() throws IOException {
+			SocketChannel java_server_socket_channel;
+			java_server_socket_channel = SocketChannel.open();
+			java_server_socket_channel.configureBlocking(true);
+			java_server_socket_channel.connect(new InetSocketAddress(JAVA_SERVER_INET_ADDRESS, JAVA_PORT));
+			java_server_socket_channel.configureBlocking(false);
+			return java_server_socket_channel;
+		}
+		
+		/**
+		 * Registers the communication socket channel to selector
+		 * @param java_server_socket_channel
+		 * @param username
+		 */
+		private SSLSocketChannel registerSocketChannelForJavaServer(SocketChannel java_server_socket_channel, String username) {
+			try {
+				ssl_engine = ssl_context.createSSLEngine("10.20.221.152", java_server_socket_channel.socket().getPort());
+				ssl_engine.setUseClientMode(true);
+				SSLSocketChannel ssl_socket_channel = new SSLSocketChannel(java_server_socket_channel, ssl_engine);
+				SSLClientSession session = new SSLClientSession(ssl_socket_channel);
+				SelectionKey key = java_server_socket_channel.register(server_selector, SelectionKey.OP_READ, session);
+				
+				open_java_server_channels.put(ssl_socket_channel, session);
+				
+				ssl_socket_channel.startHandshake(); // begin the handshake with server
+				
+				session.setUsername(username);
+				
+				return ssl_socket_channel;
+
+			} catch (ClosedChannelException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				return null;
+			}
+		}
 	}
 	
 }

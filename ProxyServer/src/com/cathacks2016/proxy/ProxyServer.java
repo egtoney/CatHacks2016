@@ -70,7 +70,6 @@ public class ProxyServer {
 			server_socket_channel = ServerSocketChannel.open();
 			server_socket_channel.configureBlocking(false);
 			server_socket_channel.socket().bind(inet_socket_address, 50);
-			
 		} catch (IOException e) {
 			e.printStackTrace();
 			return;
