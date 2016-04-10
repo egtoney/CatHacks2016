@@ -1,4 +1,5 @@
 [
 	{ "caption": "Connect to server", "command": "connect_server" },
-	{ "caption": "Close connection", "command": "kill_connection"}
+	{ "caption": "Close connection", "command": "kill_connection" },
+	{ "caption": "Add project folder", "command": "add_project" },
 ]
